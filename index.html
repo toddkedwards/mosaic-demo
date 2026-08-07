@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mosaic — Canvas</title>
+  <link rel="stylesheet" href="css/editor.css">
+</head>
+<body>
+  <header class="toolbar">
+    <div class="toolbar__tools" role="group" aria-label="Insert">
+      <button class="tbtn" data-add="text" data-icon="text" title="Text" aria-label="Add text"></button>
+      <button class="tbtn" id="add-shape" data-icon="shape" title="Shape" aria-label="Add shape" aria-haspopup="menu"></button>
+      <button class="tbtn" data-add="image" data-icon="image" title="Image" aria-label="Add image"></button>
+      <button class="tbtn" data-add="video" data-icon="video" title="Video" aria-label="Add video"></button>
+      <button class="tbtn" data-add="question" data-icon="question" title="Question" aria-label="Add question"></button>
+      <button class="tbtn" data-add="button" data-icon="button" title="Button" aria-label="Add button"></button>
+      <button class="tbtn" data-add="roleplay" data-icon="roleplay" title="Practice (AI role-play)" aria-label="Add practice scenario"></button>
+      <button class="tbtn" id="add-interaction" data-icon="interact" title="Interaction (tabs, reveal, branching…)" aria-label="Add interaction" aria-haspopup="menu"></button>
+      <button class="tbtn" id="add-icon" data-icon="star" title="Icon" aria-label="Insert icon"></button>
+      <button class="tbtn" id="generate" data-icon="wand" title="Describe a course (AI)" aria-label="Generate a course with AI"></button>
+    </div>
+    <div class="toolbar__group">
+      <button class="tbtn tbtn--ghost" id="undo" data-icon="undo" title="Undo (⌘Z)" aria-label="Undo"></button>
+      <button class="tbtn tbtn--ghost" id="redo" data-icon="redo" title="Redo (⌘⇧Z)" aria-label="Redo"></button>
+      <button class="tbtn tbtn--ghost" id="delete" data-icon="trash" title="Delete (⌫)" aria-label="Delete selection"></button>
+    </div>
+
+    <input id="title" class="toolbar__title" value="Untitled course" aria-label="Course title">
+    <span id="mode-label" class="mode-label" hidden>Editing</span>
+
+    <div class="toolbar__view" role="group" aria-label="View">
+      <button class="tbtn tbtn--ghost" id="toggle-rail" data-icon="panelLeft" title="Show/hide slides" aria-label="Show or hide the slides panel"></button>
+      <button class="tbtn tbtn--ghost" id="toggle-inspector" data-icon="panelRight" title="Show/hide properties" aria-label="Show or hide the properties panel"></button>
+      <button class="tbtn tbtn--ghost" id="canvas-toggle" data-icon="contrast" title="Dark theme" aria-label="Toggle dark theme"></button>
+      <button class="tbtn tbtn--ghost" id="brand" data-icon="palette" title="Brand kit" aria-label="Brand kit"></button>
+      <button class="tbtn tbtn--ghost" id="variables" data-icon="variable" title="Variables" aria-label="Variables"></button>
+      <button class="tbtn tbtn--ghost" id="course-settings" data-icon="settings" title="Course settings (language, passing score…)" aria-label="Course settings"></button>
+      <button class="tbtn tbtn--ghost" id="a11y" data-icon="a11y" title="Accessibility check" aria-label="Accessibility check"></button>
+    </div>
+    <div class="toolbar__sep"></div>
+    <button class="btn btn--icon" id="play" data-icon="play"><span id="play-label">Preview</span></button>
+    <button class="btn btn--primary btn--icon" id="share" data-icon="share" aria-haspopup="menu">Share<span class="btn__chev" data-icon="chevron"></span></button>
+  </header>
+
+  <div class="workspace">
+    <aside class="rail">
+      <div class="rail__head">Slides</div>
+      <div id="slide-list"></div>
+      <button class="btn" id="add-slide" style="width:100%;margin-top:6px;">+ Slide</button>
+    </aside>
+
+    <div class="canvas-pane">
+      <main id="stage-wrap" class="stage-wrap">
+        <div id="preview-flag" class="preview-flag">Preview — click Edit to make changes</div>
+        <div class="stage-sizer"><div id="stage" class="stage"></div></div>
+        <section id="audit" class="audit" hidden aria-label="Accessibility issues"></section>
+      </main>
+      <!-- Floating canvas zoom (Keynote/Figma-style, bottom-left of the canvas) -->
+      <div class="canvas-zoom" role="group" aria-label="Canvas zoom">
+        <button id="zoom-out" title="Zoom out (⌘−)" aria-label="Zoom out">−</button>
+        <button id="zoom-label" title="Reset zoom to fit (⌘0)" aria-label="Zoom level">100%</button>
+        <button id="zoom-in" title="Zoom in (⌘+)" aria-label="Zoom in">+</button>
+      </div>
+    </div>
+
+    <aside class="inspector">
+      <div class="rail__head">Properties</div>
+      <div id="inspector"></div>
+    </aside>
+  </div>
+
+  <section id="timeline" class="tl" aria-label="Timeline"></section>
+
+  <script src="src/model.js"></script>
+  <script src="src/icons.js"></script>
+  <script src="src/renderer.js"></script>
+  <script src="src/ai.js"></script>
+  <script src="src/interactions.js"></script>
+  <script src="src/a11y.js"></script>
+  <script src="src/zip.js"></script>
+  <script src="src/scorm-export.js"></script>
+  <script src="src/timeline.js"></script>
+  <script src="src/templates.js"></script>
+  <script src="src/presets.js"></script>
+  <script src="src/editor.js"></script>
+  <script src="src/onboarding.js"></script>
+  <script src="src/friction.js"></script>
+  <script src="src/web.js"></script>
+  <script>
+    (function () {
+      var editor = new MosaicEditor({
+        stage: document.getElementById("stage"),
+        stageWrap: document.getElementById("stage-wrap"),
+        slideList: document.getElementById("slide-list"),
+        title: document.getElementById("title"),
+        modeLabel: document.getElementById("mode-label"),
+        inspector: document.getElementById("inspector"),
+        audit: document.getElementById("audit"),
+        timeline: document.getElementById("timeline")
+      });
+      // Default to the dark theme (user can switch to light; choice persists).
+      try { if (localStorage.getItem("mosaic.theme") !== "light") document.documentElement.setAttribute("data-theme", "dark"); }
+      catch (e) { document.documentElement.setAttribute("data-theme", "dark"); }
+      // Hide the editor chrome until a course is chosen, so launch is JUST the splash.
+      document.body.classList.add("is-launching");
+      editor.boot();
+      if (window.MosaicIcons) MosaicIcons.hydrate(document);
+      // First run: full-screen onboarding (explains the app + BYOK key). It
+      // hands off to the welcome start screen when finished/skipped.
+      var _onboarded = true;
+      try { _onboarded = localStorage.getItem("mosaic.onboarded") === "1"; } catch (e) {}
+      // Welcome / start screen on launch (toggle in the welcome footer).
+      var _showWelcome = true;
+      try { _showWelcome = localStorage.getItem("mosaic.showWelcome") !== "0"; } catch (e) {}
+      if (!_onboarded && editor.openOnboarding) {
+        editor.openOnboarding(true); // sets mosaic.onboarded on finish, then opens welcome
+      } else if (_showWelcome) { editor.openWelcome(true); }
+      else {
+        document.body.classList.remove("is-launching");
+        try { window.webkit.messageHandlers.mosaic.postMessage({ type: "exitSplash" }); } catch (e) {}
+      }
+
+      document.querySelectorAll("[data-add]").forEach(function (b) {
+        b.addEventListener("click", function () { editor.addElement(b.dataset.add); });
+      });
+
+      // Lightweight dropdown menu anchored under a toolbar button.
+      function showMenu(anchor, items) {
+        var existing = document.querySelector(".menu");
+        if (existing) existing.remove();
+        var m = document.createElement("div");
+        m.className = "menu";
+        m.setAttribute("role", "menu");
+        items.forEach(function (it) {
+          var b = document.createElement("button");
+          b.type = "button";
+          b.className = "menu__item";
+          b.setAttribute("role", "menuitem");
+          b.innerHTML = '<span class="menu__icon">' + (it.icon || "") + "</span>" + it.label;
+          b.addEventListener("click", function () { close(); it.onClick(); });
+          m.appendChild(b);
+        });
+        document.body.appendChild(m);
+        // Clamp to the viewport so right-edge buttons (Share, etc.) don't open off-screen.
+        var r = anchor.getBoundingClientRect();
+        var mw = m.offsetWidth, mh = m.offsetHeight, pad = 8;
+        var left = Math.max(pad, Math.min(r.left, window.innerWidth - mw - pad));
+        var top = r.bottom + 4;
+        if (top + mh > window.innerHeight - pad) top = Math.max(pad, r.top - mh - 4); // flip up if no room below
+        m.style.left = left + "px";
+        m.style.top = top + "px";
+        function close() {
+          m.remove();
+          document.removeEventListener("pointerdown", away, true);
+          document.removeEventListener("keydown", esc, true);
+        }
+        function away(e) { if (!m.contains(e.target) && e.target !== anchor) close(); }
+        function esc(e) { if (e.key === "Escape") close(); }
+        setTimeout(function () {
+          document.addEventListener("pointerdown", away, true);
+          document.addEventListener("keydown", esc, true);
+        }, 0);
+      }
+
+      function ic(name) { return window.MosaicIcons ? MosaicIcons.svg(name, 16) : ""; }
+      document.getElementById("add-shape").addEventListener("click", function () {
+        showMenu(this, [
+          { label: "Rectangle", icon: ic("rectangle"), onClick: function () { editor.addShape("rect"); } },
+          { label: "Ellipse", icon: ic("ellipse"), onClick: function () { editor.addShape("ellipse"); } },
+          { label: "Line", icon: ic("line"), onClick: function () { editor.addShape("line"); } },
+          { label: "Triangle", icon: "", onClick: function () { editor.addShape("triangle"); } },
+          { label: "Diamond", icon: "", onClick: function () { editor.addShape("diamond"); } },
+          { label: "Pentagon", icon: "", onClick: function () { editor.addShape("pentagon"); } },
+          { label: "Hexagon", icon: "", onClick: function () { editor.addShape("hexagon"); } },
+          { label: "Star", icon: "", onClick: function () { editor.addShape("star"); } },
+          { label: "Arrow", icon: "", onClick: function () { editor.addShape("arrow"); } }
+        ]);
+      });
+      document.getElementById("add-interaction").addEventListener("click", function () {
+        showMenu(this, [
+          { label: "Tabs", icon: ic("interact"), onClick: function () { editor.insertPreset("tabs"); } },
+          { label: "Accordion", icon: ic("interact"), onClick: function () { editor.insertPreset("accordion"); } },
+          { label: "Click to reveal", icon: ic("interact"), onClick: function () { editor.insertPreset("reveal"); } },
+          { label: "Hotspots", icon: ic("interact"), onClick: function () { editor.insertPreset("hotspots"); } },
+          { label: "Branching scenario (3 slides)", icon: ic("interact"), onClick: function () { editor.insertPreset("branching"); } }
+        ]);
+      });
+      document.getElementById("add-icon").addEventListener("click", function () { editor.openIconPicker(); });
+      document.getElementById("delete").addEventListener("click", function () { editor.deleteSelected(); });
+      document.getElementById("add-slide").addEventListener("click", function () { editor.openTemplatePicker(); });
+      document.getElementById("brand").addEventListener("click", function () { editor.openBrandEditor(); });
+      document.getElementById("variables").addEventListener("click", function () { editor.openVariables(); });
+      document.getElementById("generate").addEventListener("click", function () { editor.openGenerate(); });
+      document.getElementById("course-settings").addEventListener("click", function () { editor.openCourseSettings(); });
+
+      (function () {
+        var root = document.documentElement, btn = document.getElementById("canvas-toggle");
+        try { if (localStorage.getItem("mosaic.theme") !== "light") root.setAttribute("data-theme", "dark"); } catch (e) { root.setAttribute("data-theme", "dark"); }
+        if (root.getAttribute("data-theme") === "dark") btn.classList.add("is-on");
+        btn.addEventListener("click", function () {
+          var on = root.getAttribute("data-theme") === "dark";
+          if (on) { root.removeAttribute("data-theme"); btn.classList.remove("is-on"); }
+          else { root.setAttribute("data-theme", "dark"); btn.classList.add("is-on"); }
+          try { localStorage.setItem("mosaic.theme", on ? "light" : "dark"); } catch (e) {}
+        });
+      })();
+      // Zoom controls (toolbar). The % readout doubles as "reset to fit".
+      document.getElementById("zoom-in").addEventListener("click", function () { editor.zoomBy(1.25); });
+      document.getElementById("zoom-out").addEventListener("click", function () { editor.zoomBy(0.8); });
+      document.getElementById("zoom-label").addEventListener("click", function () { editor.setZoom("fit"); });
+      // ⌘/⌃ + scroll wheel (or trackpad pinch, which arrives as ctrl+wheel) zooms.
+      document.getElementById("stage-wrap").addEventListener("wheel", function (e) {
+        if (!(e.metaKey || e.ctrlKey)) return;
+        e.preventDefault();
+        editor.zoomBy(e.deltaY < 0 ? 1.08 : 0.93);
+      }, { passive: false });
+      document.getElementById("play").addEventListener("click", function () {
+        editor.toggleMode();
+        var previewing = editor.mode !== "edit";
+        var lab = document.getElementById("play-label");
+        if (lab) lab.textContent = previewing ? "Edit" : "Preview";
+        // Swap the icon (play ↔ pencil) so the button reads as its NEXT action.
+        var oldSvg = this.querySelector("svg");
+        if (oldSvg) oldSvg.remove();
+        if (window.MosaicIcons) this.insertAdjacentHTML("afterbegin", MosaicIcons.svg(previewing ? "edit" : "play", 16));
+        this.classList.toggle("is-on", previewing);
+        document.body.classList.toggle("is-preview", previewing);
+      });
+      document.getElementById("a11y").addEventListener("click", function () {
+        var p = document.getElementById("audit");
+        if (!p.hidden) { p.hidden = true; this.classList.remove("is-on"); return; } // toggle off
+        editor.runAudit();
+        this.classList.add("is-on");
+      });
+
+      // Share = one menu for both export paths (native shell routes through its
+      // save panels; a plain browser downloads directly).
+      var native = function () { return window.MosaicNative && window.MosaicNative.isNative(); };
+      function doExport(standard) {
+        if (native()) { window.MosaicNative.requestScormExport(standard); return; }
+        editor.save();
+        MosaicExport.exportScorm(editor.course, standard).catch(function (err) { alert("Export failed: " + err.message); });
+      }
+      function saveMosaic() {
+        if (native()) { window.MosaicNative.saveMosaic(); return; }
+        editor.exportJSON();
+      }
+      document.getElementById("share").addEventListener("click", function () {
+        showMenu(this, [
+          { label: "Export SCORM 1.2", icon: ic("download"), onClick: function () { doExport("scorm12"); } },
+          { label: "Export SCORM 2004", icon: ic("download"), onClick: function () { doExport("scorm2004"); } },
+          { label: "Export xAPI (Tin Can)", icon: ic("download"), onClick: function () { doExport("xapi"); } },
+          { label: "Export Web (HTML, no LMS)", icon: ic("download"), onClick: function () { doExport("web"); } },
+          { label: "Export for audit (Pedagrade)", icon: ic("file"), onClick: function () {
+            var md = editor.buildAuditMarkdown();
+            var name = (editor.course.title || "course").replace(/[^a-z0-9]+/gi, "-").toLowerCase() + "-audit.md";
+            if (native()) { nativePost({ type: "saveText", text: md, filename: name }); return; }
+            var blob = new Blob([md], { type: "text/markdown" });
+            var a = document.createElement("a");
+            a.href = URL.createObjectURL(blob); a.download = name; a.click();
+          } },
+          { label: "Save .mosaic file", icon: ic("file"), onClick: saveMosaic }
+        ]);
+      });
+      // (New course lives in the native File menu — File → New, ⌘N.)
+
+      // Show/hide the side panels (more canvas room — handy on small screens).
+      (function () {
+        var ws = document.querySelector(".workspace");
+        function setup(id, cls, key) {
+          var btn = document.getElementById(id);
+          try { if (localStorage.getItem(key) === "1") ws.classList.add(cls); } catch (e) {}
+          btn.classList.toggle("is-on", ws.classList.contains(cls)); // lit = panel hidden
+          btn.addEventListener("click", function () {
+            var hidden = ws.classList.toggle(cls);
+            btn.classList.toggle("is-on", hidden);
+            try { localStorage.setItem(key, hidden ? "1" : "0"); } catch (e) {}
+            if (editor.fitStage) editor.fitStage(); // canvas width changed → refit
+          });
+        }
+        setup("toggle-rail", "no-rail", "mosaic.hideRail");
+        setup("toggle-inspector", "no-inspector", "mosaic.hideInspector");
+      })();
+      (function () {
+        var titleEl = document.getElementById("title");
+        titleEl.addEventListener("change", function () { editor.save(); });
+        titleEl.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); this.blur(); } });
+      })();
+      document.getElementById("undo").addEventListener("click", function () { editor.undo(); });
+      document.getElementById("redo").addEventListener("click", function () { editor.redo(); });
+
+      document.addEventListener("keydown", function (e) {
+        var a = document.activeElement;
+        var typing = a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable);
+        var mod = e.metaKey || e.ctrlKey;
+        if (mod && (e.key === "z" || e.key === "Z")) {
+          if (typing) return; // let the field handle native undo
+          e.preventDefault();
+          if (e.shiftKey) editor.redo(); else editor.undo();
+          return;
+        }
+        if (mod && (e.key === "d" || e.key === "D")) {
+          if (typing) return;
+          e.preventDefault(); editor.duplicateContext();
+          return;
+        }
+        // Canvas zoom (⌘+ / ⌘- / ⌘0) — like every other Mac app.
+        if (mod && (e.key === "=" || e.key === "+")) { e.preventDefault(); editor.zoomBy(1.25); return; }
+        if (mod && (e.key === "-" || e.key === "_")) { e.preventDefault(); editor.zoomBy(0.8); return; }
+        if (mod && e.key === "0") { e.preventDefault(); editor.setZoom("fit"); return; }
+        // Keyboard-shortcuts cheat sheet (⌘/).
+        if (mod && e.key === "/") { if (typing) return; e.preventDefault(); editor.openShortcuts(); return; }
+        // --- More PowerPoint / Keynote conventions --------------------------
+        var inRail = a && a.closest && a.closest("#slide-list");
+        var inPanel = a && a.closest && a.closest("#slide-list, .inspector");
+        var modalUp = document.querySelector(".modal__backdrop, .colorpop, .ctxmenu, .welcome__backdrop");
+        // Tab / Shift-Tab cycle through the slide's objects.
+        if (e.key === "Tab" && !typing && !inPanel && !modalUp) {
+          e.preventDefault(); editor.selectNextObject(e.shiftKey ? -1 : 1); return;
+        }
+        // Esc clears the selection.
+        if (e.key === "Escape" && !typing && !modalUp && editor.selectedId) {
+          e.preventDefault(); editor.select(null); return;
+        }
+        // Return edits a single selected text box.
+        if (e.key === "Enter" && !mod && !typing && !modalUp && editor.selectedId && editor.selectedIds.length === 1) {
+          var selEl = editor.selectedEl();
+          if (selEl && selEl.type === "text") {
+            e.preventDefault();
+            var tnode = editor.refs.stage.querySelector('[data-el-id="' + selEl.id + '"]');
+            if (tnode) editor.beginTextEdit(tnode, selEl);
+            return;
+          }
+        }
+        // Bold / Italic / Underline on a selected text box (without entering edit).
+        if (mod && !e.altKey && !e.shiftKey && /^[biu]$/i.test(e.key) && editor.selectedId && !typing) {
+          e.preventDefault();
+          var k = e.key.toLowerCase();
+          editor.toggleTextStyleSelected(k === "b" ? "bold" : k === "i" ? "italic" : "underline");
+          return;
+        }
+        // Group / Ungroup — Keynote's ⌥⌘G / ⌥⌘⇧G chords (aliases of ⌘G / ⌘⇧G).
+        if (mod && e.altKey && (e.key === "g" || e.key === "G")) {
+          if (typing) return;
+          e.preventDefault(); if (e.shiftKey) editor.ungroupSelected(); else editor.groupSelected(); return;
+        }
+        // Lock / unlock the selection (⌘L).
+        if (mod && !e.altKey && (e.key === "l" || e.key === "L")) {
+          if (typing || !editor.selectedId) return;
+          e.preventDefault(); editor.toggleLockSelected(); return;
+        }
+        // Slide navigator: ↑/↓ move between slides, ⌥↑/⌥↓ reorder — when the rail
+        // has focus and no canvas object is selected.
+        if (inRail && !editor.selectedId && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+          e.preventDefault();
+          var up = e.key === "ArrowUp";
+          if (e.altKey) { editor.moveSlide(up ? -1 : 1); }
+          else { var ni = editor.slideIndex + (up ? -1 : 1); if (ni >= 0 && ni < editor.course.slides.length) { editor.gotoSlide(ni); editor.focusSlideChip(editor.slideIndex); } }
+          return;
+        }
+        if (e.key === "Backspace" || e.key === "Delete") {
+          if (typing) return; // text fields + inline slide rename handle their own delete
+          // A selected canvas element wins (you're clearly acting on it)...
+          if (editor.selectedId && !editor.editingTextId) {
+            e.preventDefault(); editor.deleteSelected();
+          // ...otherwise, if a slide chip in the rail has focus, delete that slide.
+          } else if (a && a.closest && a.closest("#slide-list")) {
+            e.preventDefault();
+            var idx = editor.slideIndex;
+            editor.deleteSlide(idx);
+            editor.focusSlideChip(editor.slideIndex); // re-focus so you can delete several in a row
+          }
+        }
+        if (mod && (e.key === "a" || e.key === "A")) {
+          if (typing) return;
+          e.preventDefault(); editor.selectAll();
+          return;
+        }
+        if (mod && (e.key === "g" || e.key === "G")) {
+          if (typing) return;
+          e.preventDefault();
+          if (e.shiftKey) editor.ungroupSelected(); else editor.groupSelected();
+          return;
+        }
+        // Arrow-key nudge (Shift = 10px). Move selected objects like PowerPoint/Keynote.
+        if (!typing && !mod && editor.selectedIds && editor.selectedIds.length && /^Arrow/.test(e.key)) {
+          e.preventDefault();
+          var step = e.shiftKey ? 10 : 1;
+          var nx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+          var ny = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+          editor.nudgeSelected(nx, ny);
+          return;
+        }
+        // Grow / shrink font of selected text (⌘⇧> / ⌘⇧<).
+        if (mod && e.shiftKey && (e.key === "." || e.key === ">" || e.key === "," || e.key === "<")) {
+          if (typing) return;
+          e.preventDefault();
+          editor.growFont((e.key === "." || e.key === ">") ? 2 : -2);
+          return;
+        }
+        // Copy / paste STYLE (⌥⌘C / ⌥⌘V).
+        if (mod && e.altKey && (e.key === "c" || e.key === "C")) { if (typing) return; e.preventDefault(); editor.copyStyle(); return; }
+        if (mod && e.altKey && (e.key === "v" || e.key === "V")) { if (typing) return; e.preventDefault(); editor.pasteStyle(); return; }
+        // Z-order: ⌘] / ⌘[ (forward / backward), add Shift for front / back.
+        if (mod && (e.key === "]" || e.key === "[")) {
+          if (typing || !editor.selectedId) return;
+          e.preventDefault();
+          var fwd = e.key === "]";
+          editor.arrange(e.shiftKey ? (fwd ? "front" : "back") : (fwd ? "forward" : "backward"));
+          return;
+        }
+        // Spacebar is a tap/hold control: a quick TAP plays/pauses the timeline;
+        // HOLDING it turns the canvas into a hand (drag to pan — see below). Skip
+        // when typing or on a focused control.
+        if ((e.key === " " || e.code === "Space")) {
+          if (typing || (a && (a.tagName === "BUTTON" || a.tagName === "SELECT"))) return;
+          e.preventDefault();
+          if (!editor.spaceHeld) {
+            editor.spaceHeld = true; editor._panned = false;
+            document.getElementById("stage-wrap").style.cursor = "grab";
+          }
+        }
+      });
+      // Space released: if it was a tap (no pan drag happened), play/pause.
+      document.addEventListener("keyup", function (e) {
+        if (e.key !== " " && e.code !== "Space") return;
+        if (!editor.spaceHeld) return;
+        editor.spaceHeld = false;
+        document.getElementById("stage-wrap").style.cursor = "";
+        if (!editor._panned && editor.timeline) {
+          editor.timeline.playing ? editor.timeline.pause() : editor.timeline.play();
+        }
+        editor._panned = false;
+      });
+      // Hand tool: hold Space and drag anywhere on the canvas to pan it (so a
+      // plain mouse can move the canvas in any direction, not just the wheel's
+      // vertical axis). Capture phase + stopPropagation so it pre-empts marquee.
+      (function () {
+        var wrap = document.getElementById("stage-wrap");
+        var panning = false, sx = 0, sy = 0, sl = 0, st = 0;
+        wrap.addEventListener("pointerdown", function (e) {
+          if (!editor.spaceHeld) return;
+          panning = true; editor._panned = true;
+          sx = e.clientX; sy = e.clientY; sl = wrap.scrollLeft; st = wrap.scrollTop;
+          wrap.style.cursor = "grabbing";
+          try { wrap.setPointerCapture(e.pointerId); } catch (err) {}
+          e.preventDefault(); e.stopPropagation();
+        }, true);
+        wrap.addEventListener("pointermove", function (e) {
+          if (!panning) return;
+          wrap.scrollLeft = sl - (e.clientX - sx);
+          wrap.scrollTop = st - (e.clientY - sy);
+          e.preventDefault();
+        }, true);
+        function end() { if (!panning) return; panning = false; wrap.style.cursor = editor.spaceHeld ? "grab" : ""; }
+        wrap.addEventListener("pointerup", end, true);
+        wrap.addEventListener("pointercancel", end, true);
+      })();
+
+      // Clipboard (Cut / Copy / Paste) for canvas elements — PowerPoint/Keynote
+      // style. Uses the native clipboard EVENTS (so the Edit menu's ⌘C/⌘X/⌘V and
+      // the keys both work) and DEFERS to text fields so normal text copy/paste
+      // is untouched. Paste also accepts an image copied from outside the app.
+      function isTextTarget() {
+        var a = document.activeElement;
+        return editor.editingTextId || editor.editingQuestionId ||
+          (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable));
+      }
+      document.addEventListener("copy", function (e) {
+        if (isTextTarget()) return;
+        if (editor.selectedIds && editor.selectedIds.length) { editor.copySelected(); e.preventDefault(); }
+      });
+      document.addEventListener("cut", function (e) {
+        if (isTextTarget()) return;
+        if (editor.selectedIds && editor.selectedIds.length) { editor.cutSelected(); e.preventDefault(); }
+      });
+      document.addEventListener("paste", function (e) {
+        if (isTextTarget()) return;
+        var items = (e.clipboardData && e.clipboardData.items) || [];
+        for (var i = 0; i < items.length; i++) {
+          if (items[i].type && items[i].type.indexOf("image") === 0) {
+            var file = items[i].getAsFile();
+            if (!file) continue;
+            var reader = new FileReader();
+            reader.onload = function () { editor.insertImage(reader.result); };
+            reader.readAsDataURL(file);
+            e.preventDefault();
+            return;
+          }
+        }
+        if (editor._clipboard && editor._clipboard.length) { editor.pasteClipboard(); e.preventDefault(); }
+      });
+
+      editor.updateHistoryButtons();
+
+      window._mosaic = editor; // debug handle
+
+      // --- Native shell bridge (no-op in a plain browser) -------------------
+      // The macOS app (WKWebView) drives New/Open/Save/Export through these.
+      function nativePost(msg) {
+        if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mosaic) {
+          window.webkit.messageHandlers.mosaic.postMessage(msg);
+        }
+      }
+      window.MosaicNative = {
+        // Pull model: native Save calls this via evaluateJavaScript and gets the string back.
+        getCourseJSON: function () { editor.save(); return MosaicModel.serialize(editor.course); },
+        // Open: native passes the file's bytes as base64 (UTF-8 safe).
+        loadCourseB64: function (b64) {
+          try {
+            var json = decodeURIComponent(escape(window.atob(b64)));
+            editor.loadCourse(json);
+          } catch (e) { nativePost({ type: "error", message: "Could not open file: " + e.message }); }
+        },
+        newCourse: function () { editor.newCourse(true); },
+        // Door 2 doc-input: native NSOpenPanel picked + extracted a source doc.
+        sourcePicked: function (nameB64, textB64) {
+          try {
+            var name = decodeURIComponent(escape(window.atob(nameB64)));
+            var text = decodeURIComponent(escape(window.atob(textB64)));
+            editor.receiveSource(name, text);
+          } catch (e) { nativePost({ type: "error", message: "Could not read source: " + e.message }); }
+        },
+        openCourseSettings: function () { editor.openCourseSettings(); },
+        openWelcome: function () { editor.openWelcome(); },
+        // "Close Course" → return to the launch-style splash (keeps the window +
+        // web view alive, so New / Open still work afterward).
+        closeToWelcome: function () { document.body.classList.add("is-launching"); editor.openWelcome(true); },
+        saveMosaic: function () {
+          editor.save();
+          nativePost({
+            type: "saveMosaic",
+            filename: MosaicExport.slug(editor.course.title) + ".mosaic.json",
+            json: MosaicModel.serialize(editor.course)
+          });
+        },
+        // Export: build the package, hand the bytes to native to save via a panel.
+        requestScormExport: function (standard) {
+          standard = standard || "scorm12";
+          editor.save();
+          MosaicExport.buildBlob(editor.course, standard)
+            .then(function (blob) { return blob.arrayBuffer(); })
+            .then(function (buf) {
+              var bytes = new Uint8Array(buf), bin = "";
+              for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+              nativePost({
+                type: "scormZip",
+                filename: MosaicExport.slug(editor.course.title) + MosaicExport.suffix(standard) + ".zip",
+                base64: window.btoa(bin)
+              });
+            })
+            .catch(function (e) { nativePost({ type: "error", message: "Export failed: " + e.message }); });
+        },
+        isNative: function () { return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.mosaic); },
+
+        // Text-to-speech narration (native macOS voices). The studio UI lives in
+        // editor.openNarrationStudio(); these are the bridge calls + callbacks.
+        _voices: [],
+        requestVoices: function () { nativePost({ type: "ttsVoices" }); },
+        synthesize: function (text, voice) { nativePost({ type: "ttsSynthesize", text: text, voice: voice }); },
+        _onVoices: function (list) { this._voices = list || []; if (this._voicesCb) this._voicesCb(this._voices); },
+        _onNarration: function (b64, durationSec) {
+          editor.insertAudioData("data:audio/wav;base64," + b64, "Script narration", durationSec, "tts");
+          if (this._narrationCb) { this._narrationCb(); this._narrationCb = null; }
+        },
+
+        // Eyedropper — native NSColorSampler lets the user sample any pixel on
+        // screen (WebKit has no EyeDropper API). Native replies via _onColorPicked.
+        pickScreenColor: function (cb) { this._colorCb = cb; nativePost({ type: "pickColor" }); },
+        _onColorPicked: function (hex) { if (this._colorCb) { this._colorCb(hex); this._colorCb = null; } },
+
+        // The native shell forwards Escape here (WKWebView otherwise swallows it
+        // at the document level). Handle it in the same priority order a desktop
+        // app would: close the topmost transient UI, else commit a text edit,
+        // else clear the selection.
+        onEscape: function () {
+          var ctx = document.querySelector(".ctxmenu"); if (ctx) { ctx.remove(); return; }
+          var pop = document.querySelector(".colorpop"); if (pop) { pop.remove(); return; }
+          var modal = document.querySelector(".modal__backdrop"); if (modal) { modal.remove(); return; }
+          var wel = document.querySelector(".welcome__backdrop"); if (wel) { if (wel._shut) wel._shut(); else wel.remove(); return; }
+          if (editor.editingTextId) { var n = document.querySelector(".m-el--text.is-editing"); if (n) n.blur(); return; }
+          if (editor.selectedId) { editor.select(null); }
+        },
+
+        // One dispatcher the native menu bar drives (bridge.cmd). Keeping it in
+        // one place means the macOS menus and the web UI share exactly one path.
+        cmd: function (name) {
+          function typing() {
+            var a = document.activeElement;
+            return a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable);
+          }
+          switch (name) {
+            // Edit — undo/redo defer to the focused text field when one is active,
+            // so ⌘Z does the expected thing whether you're on the canvas or typing.
+            case "undo": if (typing()) document.execCommand("undo"); else editor.undo(); break;
+            case "redo": if (typing()) document.execCommand("redo"); else editor.redo(); break;
+            case "duplicate": editor.duplicateContext(); break;
+            case "delete": editor.deleteSelected(); break;
+            // Insert
+            case "insertText": editor.addElement("text"); break;
+            case "insertRect": editor.addShape("rect"); break;
+            case "insertEllipse": editor.addShape("ellipse"); break;
+            case "insertLine": editor.addShape("line"); break;
+            case "insertImage": editor.addElement("image"); break;
+            case "insertVideo": editor.addElement("video"); break;
+            case "insertButton": editor.addElement("button"); break;
+            case "insertIcon": editor.openIconPicker(); break;
+            case "insertResult": editor.addElement("result"); break;
+            case "insertQuestion": editor.addElement("question"); break;
+            case "insertAudio": editor.addAudio(); break;
+            case "narrationScript": editor.openNarrationStudio(); break;
+            case "recordNarration": editor.openRecorder(); break;
+            case "addSlide": editor.openTemplatePicker(); break;
+            // Arrange (z-order)
+            case "arrangeFront": editor.arrange("front"); break;
+            case "arrangeForward": editor.arrange("forward"); break;
+            case "arrangeBackward": editor.arrange("backward"); break;
+            case "arrangeBack": editor.arrange("back"); break;
+            case "alignLeft": editor.alignSelected("left"); break;
+            case "alignHCenter": editor.alignSelected("hcenter"); break;
+            case "alignRight": editor.alignSelected("right"); break;
+            case "alignTop": editor.alignSelected("top"); break;
+            case "alignVMiddle": editor.alignSelected("vmiddle"); break;
+            case "alignBottom": editor.alignSelected("bottom"); break;
+            case "distributeH": editor.distributeSelected("h"); break;
+            case "distributeV": editor.distributeSelected("v"); break;
+            case "group": editor.groupSelected(); break;
+            case "ungroup": editor.ungroupSelected(); break;
+            case "toggleLock": if (!typing()) editor.toggleLockSelected(); break;
+            // ⌘A selects all objects on the canvas, but defers to the focused
+            // text field so it still selects text while you're editing.
+            case "selectAll": if (typing()) document.execCommand("selectAll", false, null); else editor.selectAll(); break;
+            // View — reuse the toolbar buttons so behaviour + state stay identical.
+            case "togglePreview": document.getElementById("play").click(); break;
+            case "toggleRail": document.getElementById("toggle-rail").click(); break;
+            case "toggleInspector": document.getElementById("toggle-inspector").click(); break;
+            case "toggleCanvasDark": document.getElementById("canvas-toggle").click(); break;
+            case "zoomIn": editor.zoomBy(1.25); break;
+            case "zoomOut": editor.zoomBy(0.8); break;
+            case "zoomFit": editor.setZoom("fit"); break;
+            case "showShortcuts": editor.openShortcuts(); break;
+            case "showOnboarding": editor.openOnboarding(true); break;
+            case "openVariables": editor.openVariables(); break;
+            case "aiSettings": editor.openSettings("ai"); break;
+            case "openSettings": editor.openSettings(); break;
+            case "runAudit": document.getElementById("a11y").click(); break;
+            case "fitTimeline": editor.fitElementsToSlide(); break;
+            default: break;
+          }
+        }
+      };
+
+    })();
+  </script>
+</body>
+</html>

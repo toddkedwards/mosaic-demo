@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mosaic Course</title>
+  <link rel="stylesheet" href="play.css">
+</head>
+<body>
+  <div class="player">
+    <main id="stagewrap" class="player__stagewrap" tabindex="-1" aria-label="Course slide">
+      <div id="stage" class="player__stage" role="group"></div>
+    </main>
+    <nav class="player__nav" aria-label="Course navigation">
+      <button id="back" class="pbtn" aria-label="Previous slide">Back</button>
+      <button id="play" class="pbtn pbtn--play" aria-label="Pause" hidden>❚❚</button>
+      <div id="pbar" class="player__pbar" hidden><div id="pbarfill" class="player__pbarfill"></div></div>
+      <div id="progress" class="player__progress" aria-hidden="true"></div>
+      <button id="next" class="pbtn pbtn--primary" aria-label="Next slide">Next</button>
+    </nav>
+  </div>
+  <div id="live" class="sr-only" aria-live="polite" role="status"></div>
+
+  <!-- course-data.js defines window.MOSAIC_COURSE (inlined at export time) -->
+  <script src="course-data.js"></script>
+  <!-- config.js: optional deployment config (AI proxy / test key) — editable
+       inside the package without a rebuild; must load before ai.js -->
+  <script src="config.js"></script>
+  <script src="scorm.js"></script>
+  <script src="renderer.js"></script>
+  <script src="ai.js"></script>
+  <script src="interactions.js"></script>
+  <script src="player.js"></script>
+</body>
+</html>
